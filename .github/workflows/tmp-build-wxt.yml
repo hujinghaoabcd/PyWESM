@@ -23,6 +23,20 @@ jobs:
           base64 --decode source_bundle.zip.b64 > source_bundle.zip
           unzip -q source_bundle.zip
 
+      - name: Apply header CRC fix
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('aethercast-wxt-mvp/rust/wxt-builder/src/main.rs')
+          text = path.read_text(encoding='utf-8')
+          old = '''    // Header CRC is calculated with bytes 108..112 set to zero.\n    let header_crc = crc32(&header);\n    put_u32(&mut header, 108, header_crc);\n    let label = spec.variable_label.as_bytes();\n    let copy_len = label.len().min(16);\n    header[112..112 + copy_len].copy_from_slice(&label[..copy_len]);\n'''
+          new = '''    // Copy every header field before calculating the CRC. The CRC field\n    // itself (bytes 108..112) is still zero at this point.\n    let label = spec.variable_label.as_bytes();\n    let copy_len = label.len().min(16);\n    header[112..112 + copy_len].copy_from_slice(&label[..copy_len]);\n    let header_crc = crc32(&header);\n    put_u32(&mut header, 108, header_crc);\n'''
+          if old not in text:
+              raise SystemExit('CRC patch target not found')
+          path.write_text(text.replace(old, new), encoding='utf-8')
+          PY
+
       - name: Normalize GFS with Python
         working-directory: aethercast-wxt-mvp
         run: |
