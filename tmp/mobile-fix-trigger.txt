@@ -1,1 +1,1 @@
-Trigger the temporary mobile compatibility workflow.
+Trigger the temporary mobile compatibility workflow after the MapLibre style-readiness patch.
