@@ -1,1 +1,1 @@
-Temporary branch content used to trigger the dedicated MapLibre style-readiness workflow.
+Trigger responsive mobile framing verification after the final MapLibre fix.
