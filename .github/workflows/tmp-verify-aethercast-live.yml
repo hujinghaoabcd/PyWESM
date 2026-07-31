@@ -1,0 +1,25 @@
+name: Temporary Verify AetherCast Live
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify GitHack live URL
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL='https://raw.githack.com/hujinghaoabcd/PyWESM/main/aethercast-demo/index.html'
+          curl --fail --location --retry 5 --retry-delay 3 --connect-timeout 20 --max-time 120 \
+            --user-agent 'AetherCast-Live-Verifier/1.0' "$URL" -o page.html
+          grep -q 'AetherCast WXT Demo' page.html
+          test "$(stat -c%s page.html)" -gt 10000
+          echo "LIVE_URL=$URL"
+          echo "HTTP verification passed; bytes=$(stat -c%s page.html)"
