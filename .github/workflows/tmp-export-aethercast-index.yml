@@ -1,0 +1,22 @@
+name: Temporary Export AetherCast Index
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/upload-artifact@v4
+        with:
+          name: current-aethercast-index
+          path: aethercast-demo/index.html
+          if-no-files-found: error
+          retention-days: 1
