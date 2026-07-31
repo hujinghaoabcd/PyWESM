@@ -11,11 +11,6 @@ jobs:
   fix:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    env:
-      GH_TOKEN: ${{ github.token }}
-      REPO: hujinghaoabcd/PyWESM
-      INDEX_BLOB: 4eea8ad3b7d2f5fa91f61a8cfae8468ca1165f88
-      APP_BLOB: 552a1d17037c0fe25c04db8fc12dce20c4856793
     steps:
       - name: Checkout main
         uses: actions/checkout@v4
@@ -23,31 +18,78 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Restore verified plain HTML and JavaScript blobs
+      - name: Verify plain mobile-safe deployment
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p aethercast-demo
-          gh api "repos/$REPO/git/blobs/$INDEX_BLOB" --jq .content | tr -d '\n' | base64 --decode > aethercast-demo/index.html
-          gh api "repos/$REPO/git/blobs/$APP_BLOB" --jq .content | tr -d '\n' | base64 --decode > aethercast-demo/app.js
-
-          test "$(git hash-object aethercast-demo/index.html)" = "$INDEX_BLOB"
-          test "$(git hash-object aethercast-demo/app.js)" = "$APP_BLOB"
           grep -q '<script src="./app.js"></script>' aethercast-demo/index.html
           grep -q 'maplibregl.Map' aethercast-demo/app.js
           ! grep -q 'atob(' aethercast-demo/index.html
           ! grep -q 'DecompressionStream' aethercast-demo/index.html
 
-      - name: Commit mobile-safe page to main when changed
+      - name: Stop waiting for every external map tile
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('aethercast-demo/app.js')
+          text = path.read_text(encoding='utf-8')
+
+          text = text.replace(
+              "    map.once('load', fitChina);",
+              "    if (map.isStyleLoaded()) fitChina(); else map.once('style.load', fitChina);",
+          )
+
+          old = "    Promise.all([loadWxt(DATA.temp),loadWxt(DATA.wind),new Promise((resolve,reject)=>{if(map.loaded())resolve();else{map.once('load',resolve);map.once('error',reject);}})])\n"
+          new = """    function waitForMapStyle() {
+      if (map.isStyleLoaded()) return Promise.resolve();
+      return new Promise((resolve, reject) => {
+        let settled = false;
+        const finish = () => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve();
+        };
+        const timer = setTimeout(() => {
+          if (map.getStyle() && Array.isArray(map.getStyle().layers)) finish();
+          else reject(new Error('MapLibre 底图样式加载超时'));
+        }, 20000);
+        map.once('style.load', finish);
+        map.once('load', finish);
+      });
+    }
+
+    Promise.all([loadWxt(DATA.temp), loadWxt(DATA.wind), waitForMapStyle()])
+"""
+
+          if old in text:
+              text = text.replace(old, new)
+          elif 'function waitForMapStyle()' not in text:
+              raise SystemExit('Expected map readiness block was not found')
+
+          if "map.once('error',reject)" in text:
+              raise SystemExit('The old all-map-tiles readiness logic remains')
+          if 'function waitForMapStyle()' not in text:
+              raise SystemExit('The style readiness helper was not installed')
+
+          path.write_text(text, encoding='utf-8')
+          print(f'app.js={path.stat().st_size} bytes')
+
+      - name: Validate and publish
         shell: bash
         run: |
           set -euo pipefail
+          node --check aethercast-demo/app.js
+          test "$(head -c 4 aethercast-demo/air_temperature_2m.wxt)" = 'WXT1'
+          test "$(head -c 4 aethercast-demo/wind_10m_uv.wxt)" = 'WXT1'
+
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add aethercast-demo/index.html aethercast-demo/app.js
+          git add aethercast-demo/app.js
           if git diff --cached --quiet; then
-            echo 'main already contains the verified mobile-safe files'
+            echo 'Map readiness fix is already present'
             exit 0
           fi
-          git commit -m 'fix: serve AetherCast without Base64 loader'
+          git commit -m 'fix: initialize weather layer after MapLibre style loads'
           git push origin HEAD:main
