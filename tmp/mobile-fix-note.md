@@ -1,1 +1,1 @@
-Temporary branch content used to trigger the AetherCast mobile fix workflow.
+Temporary branch content used to trigger the dedicated MapLibre style-readiness workflow.
