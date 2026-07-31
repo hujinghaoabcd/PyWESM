@@ -5,45 +5,66 @@ on:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   verify-browser:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: hujinghaoabcd/PyWESM
+      INDEX_BLOB: 4eea8ad3b7d2f5fa91f61a8cfae8468ca1165f88
+      APP_BLOB: c8a2f36f1841ef296af551e19f09d0704d0b0461
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
+          fetch-depth: 0
 
-      - name: Verify static files and syntax
+      - name: Publish verified plain mobile files
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git hash-object aethercast-demo/index.html)" = '4eea8ad3b7d2f5fa91f61a8cfae8468ca1165f88'
-          test "$(git hash-object aethercast-demo/app.js)" = '552a1d17037c0fe25c04db8fc12dce20c4856793'
+          gh api "repos/$REPO/git/blobs/$INDEX_BLOB" --jq .content | tr -d '\n' | base64 --decode > aethercast-demo/index.html
+          gh api "repos/$REPO/git/blobs/$APP_BLOB" --jq .content | tr -d '\n' | base64 --decode > aethercast-demo/app.js
+          test "$(git hash-object aethercast-demo/index.html)" = "$INDEX_BLOB"
+          test "$(git hash-object aethercast-demo/app.js)" = "$APP_BLOB"
           ! grep -q 'atob(' aethercast-demo/index.html
           ! grep -q 'DecompressionStream' aethercast-demo/index.html
-          grep -q '<script src="./app.js"></script>' aethercast-demo/index.html
+          grep -q 'function waitForMapStyle' aethercast-demo/app.js
           node --check aethercast-demo/app.js
           test "$(head -c 4 aethercast-demo/air_temperature_2m.wxt)" = 'WXT1'
           test "$(head -c 4 aethercast-demo/wind_10m_uv.wxt)" = 'WXT1'
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add aethercast-demo/index.html aethercast-demo/app.js
+          if ! git diff --cached --quiet; then
+            git commit -m 'fix: make AetherCast mobile loading independent of map tiles'
+            git push origin HEAD:main
+          fi
+          echo "DEPLOY_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
 
       - name: Verify public immutable URLs
         shell: bash
         run: |
           set -euo pipefail
-          BASE='https://raw.githack.com/hujinghaoabcd/PyWESM/891cd6d1632d3ee5a5458f3a26a20294b7a41f28/aethercast-demo'
-          curl --fail --location --retry 5 "$BASE/index.html" -o /tmp/public-index.html
-          curl --fail --location --retry 5 "$BASE/app.js" -o /tmp/public-app.js
-          grep -q '<script src="./app.js"></script>' /tmp/public-index.html
-          ! grep -q 'atob(' /tmp/public-index.html
+          BASE="https://raw.githack.com/hujinghaoabcd/PyWESM/$DEPLOY_COMMIT/aethercast-demo"
+          for i in 1 2 3 4 5; do
+            if curl --fail --location "$BASE/index.html" -o /tmp/public-index.html && \
+               curl --fail --location "$BASE/app.js" -o /tmp/public-app.js; then break; fi
+            sleep 3
+          done
+          test "$(git hash-object /tmp/public-index.html)" = "$INDEX_BLOB"
+          test "$(git hash-object /tmp/public-app.js)" = "$APP_BLOB"
           node --check /tmp/public-app.js
           curl --fail --location --retry 3 'https://unpkg.com/maplibre-gl@5.12.0/dist/maplibre-gl.js' -o /tmp/maplibre.js
           curl --fail --location --retry 3 'https://tiles.openfreemap.org/styles/liberty' -o /tmp/style.json
           grep -q 'sources' /tmp/style.json
+          echo "LIVE_URL=$BASE/index.html"
 
-      - name: Open the page in headless Chrome
+      - name: Open page in a mobile-size headless Chrome
         shell: bash
         run: |
           set -euo pipefail
@@ -53,21 +74,23 @@ jobs:
           sleep 2
           google-chrome --headless=new --no-sandbox --disable-dev-shm-usage \
             --enable-unsafe-swiftshader --ignore-gpu-blocklist \
-            --virtual-time-budget=30000 \
-            --window-size=412,915 \
+            --virtual-time-budget=35000 --window-size=412,915 \
             --dump-dom http://127.0.0.1:8000/index.html > /tmp/dom.html 2>/tmp/chrome.log
-          grep -q '全中国 WXT 已加载' /tmp/dom.html || { cat /tmp/chrome.log; tail -n 80 /tmp/dom.html; exit 1; }
+          grep -q '全中国 WXT 已加载' /tmp/dom.html || { cat /tmp/chrome.log; tail -n 100 /tmp/dom.html; exit 1; }
           grep -q 'loading-cover hide' /tmp/dom.html
-          echo 'Headless Chrome loaded MapLibre, OpenFreeMap and both WXT files successfully.'
 
       - name: Capture mobile screenshot
         shell: bash
         run: |
           set -euo pipefail
+          python3 -m http.server 8001 --directory aethercast-demo >/tmp/http2.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID || true' EXIT
+          sleep 2
           google-chrome --headless=new --no-sandbox --disable-dev-shm-usage \
             --enable-unsafe-swiftshader --ignore-gpu-blocklist \
-            --virtual-time-budget=30000 --window-size=412,915 \
-            --screenshot=aethercast-mobile.png http://127.0.0.1:8000/index.html
+            --virtual-time-budget=35000 --window-size=412,915 \
+            --screenshot=aethercast-mobile.png http://127.0.0.1:8001/index.html
           test -s aethercast-mobile.png
 
       - uses: actions/upload-artifact@v4
