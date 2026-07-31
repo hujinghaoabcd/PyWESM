@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#07111f">
+<title>AetherCast WXT Demo</title>
+<meta name="description" content="NOAA GFS 数据经过 Python 标准化和 Rust WXT 编码后的浏览器可视化演示">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="view" aria-label="南京区域 GFS 温度和风场可视化"></canvas>
+<header>
+  <div class="brand"><b>A</b><div><h1>AetherCast · WXT Demo</h1><p>GFS → Python → Rust WXT → Browser</p></div></div>
+  <div class="live"><i></i><span id="state">解析 WXT 中</span></div>
+</header>
+<aside class="controls">
+  <h2>图层控制</h2><p id="run">读取模式元数据…</p>
+  <label><span>2 米温度填色<small>WXT scalar</small></span><input id="tempOn" type="checkbox" checked></label>
+  <label><span>10 米风场粒子<small>WXT U/V</small></span><input id="windOn" type="checkbox" checked></label>
+  <div class="slider"><span>粒子数量 <em id="densityText">1000</em></span><input id="density" type="range" min="200" max="2500" step="50" value="1000"></div>
+  <div class="buttons"><button id="play">暂停</button><button id="reset">重置</button></div>
+</aside>
+<section class="readout">
+  <span id="coord">118.500°, 32.000°</span>
+  <b id="temp">— ℃</b>
+  <b id="wind">— m/s</b>
+  <small id="dir">移动鼠标读取数值</small>
+</section>
+<section class="legend"><div><span>2 米气温</span><span id="range">℃</span></div><i></i><div id="ticks"></div></section>
+<footer>NOAA/NCEP GFS 0.25° · 118–119°E / 31.5–32.5°N · 真实 WXT 数据</footer>
+<div id="error"></div>
+<script src="data-temp.js"></script>
+<script src="data-wind-a.js"></script>
+<script src="data-wind-b.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
