@@ -1,0 +1,34 @@
+name: Temporary Verify China MapLibre Demo
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Verify public page and WXT assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='https://raw.githack.com/hujinghaoabcd/PyWESM/7b7ae180f224c70d2d4237656be9aae93b2ac695/aethercast-demo'
+          curl --fail --location --retry 5 --retry-delay 3 "$BASE/index.html" -o page.html
+          grep -q 'AetherCast 中国 GFS' page.html
+          test "$(stat -c%s page.html)" -gt 10000
+          curl --fail --location --retry 5 --retry-delay 3 "$BASE/air_temperature_2m.wxt" -o temp.wxt
+          curl --fail --location --retry 5 --retry-delay 3 "$BASE/wind_10m_uv.wxt" -o wind.wxt
+          test "$(head -c 4 temp.wxt)" = 'WXT1'
+          test "$(head -c 4 wind.wxt)" = 'WXT1'
+          test "$(stat -c%s temp.wxt)" -gt 500000
+          test "$(stat -c%s wind.wxt)" -gt 1000000
+          curl --fail --location --retry 3 'https://unpkg.com/maplibre-gl@6.0.0/dist/maplibre-gl.js' -o maplibre.js
+          test "$(stat -c%s maplibre.js)" -gt 500000
+          curl --fail --location --retry 3 'https://tiles.openfreemap.org/styles/liberty' -o style.json
+          grep -q 'sources' style.json
+          echo "LIVE_URL=$BASE/index.html"
+          echo "page=$(stat -c%s page.html), temp=$(stat -c%s temp.wxt), wind=$(stat -c%s wind.wxt)"
