@@ -61,7 +61,7 @@
     map.addControl(new maplibregl.ScaleControl({ maxWidth: 120, unit: 'metric' }), 'bottom-right');
 
     function fitChina() { map.fitBounds(DATA.bounds, { padding: { top: 70, right: 42, bottom: 60, left: 270 }, duration: 900, maxZoom: 4.4 }); }
-    map.once('load', fitChina);
+    if (map.isStyleLoaded()) fitChina(); else map.once('style.load', fitChina);
 
     const tempStops = [
       [-25,[65,42,151]],[-15,[48,70,181]],[-5,[36,113,202]],[5,[37,169,205]],
@@ -178,7 +178,26 @@
     map.on('moveend',()=>{state.moving=false;resetParticles();state.lastTime=performance.now();});
     map.on('resize',()=>{resizeWindCanvas();resetParticles();});
 
-    Promise.all([loadWxt(DATA.temp),loadWxt(DATA.wind),new Promise((resolve,reject)=>{if(map.loaded())resolve();else{map.once('load',resolve);map.once('error',reject);}})])
+    function waitForMapStyle() {
+      if (map.isStyleLoaded()) return Promise.resolve();
+      return new Promise((resolve, reject) => {
+        let settled = false;
+        const finish = () => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve();
+        };
+        const timer = setTimeout(() => {
+          if (map.getStyle() && Array.isArray(map.getStyle().layers)) finish();
+          else reject(new Error('MapLibre 底图样式加载超时'));
+        }, 20000);
+        map.once('style.load', finish);
+        map.once('load', finish);
+      });
+    }
+
+    Promise.all([loadWxt(DATA.temp), loadWxt(DATA.wind), waitForMapStyle()])
       .then(([temp,wind])=>{
         state.temp=temp;state.wind=wind;
         map.addSource('weather-canvas',{type:'canvas',canvas:'fieldCanvas',animate:true,coordinates:[[temp.west,temp.north],[temp.east,temp.north],[temp.east,temp.south],[temp.west,temp.south]]});
