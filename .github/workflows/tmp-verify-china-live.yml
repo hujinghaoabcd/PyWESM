@@ -16,7 +16,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          BASE='https://raw.githack.com/hujinghaoabcd/PyWESM/7b7ae180f224c70d2d4237656be9aae93b2ac695/aethercast-demo'
+          BASE='https://raw.githack.com/hujinghaoabcd/PyWESM/5ad54f5b91d50013005525a1afb5547d2fea1e76/aethercast-demo'
           curl --fail --location --retry 5 --retry-delay 3 "$BASE/index.html" -o page.html
           grep -q 'AetherCast 中国 GFS' page.html
           test "$(stat -c%s page.html)" -gt 10000
@@ -26,9 +26,9 @@ jobs:
           test "$(head -c 4 wind.wxt)" = 'WXT1'
           test "$(stat -c%s temp.wxt)" -gt 500000
           test "$(stat -c%s wind.wxt)" -gt 1000000
-          curl --fail --location --retry 3 'https://unpkg.com/maplibre-gl@6.0.0/dist/maplibre-gl.js' -o maplibre.js
+          curl --fail --location --retry 3 'https://unpkg.com/maplibre-gl@5.12.0/dist/maplibre-gl.js' -o maplibre.js
           test "$(stat -c%s maplibre.js)" -gt 500000
           curl --fail --location --retry 3 'https://tiles.openfreemap.org/styles/liberty' -o style.json
           grep -q 'sources' style.json
           echo "LIVE_URL=$BASE/index.html"
-          echo "page=$(stat -c%s page.html), temp=$(stat -c%s temp.wxt), wind=$(stat -c%s wind.wxt)"
+          echo "page=$(stat -c%s page.html), temp=$(stat -c%s temp.wxt), wind=$(stat -c%s wind.wxt), maplibre=$(stat -c%s maplibre.js)"
