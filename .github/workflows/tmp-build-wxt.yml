@@ -1,0 +1,52 @@
+name: Temporary WXT MVP Build
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Unpack source bundle
+        run: unzip -q source_bundle.zip
+
+      - name: Normalize GFS with Python
+        working-directory: aethercast-wxt-mvp
+        run: |
+          python python/normalize_gfs.py sample/gfs_nanjing.grib2 build/standardized --engine fallback
+
+      - name: Build and run Rust WXT generator
+        working-directory: aethercast-wxt-mvp
+        run: |
+          cargo run --release --manifest-path rust/wxt-builder/Cargo.toml -- \
+            --input build/standardized/manifest.json \
+            --output build/wxt \
+            --size 256
+
+      - name: Verify WXT files
+        working-directory: aethercast-wxt-mvp
+        run: |
+          python python/verify_wxt.py \
+            build/wxt/air_temperature_2m.wxt \
+            build/wxt/wind_10m_uv.wxt \
+            --json build/wxt/verification.json
+          sha256sum build/wxt/*.wxt > build/wxt/SHA256SUMS.txt
+          cp rust/wxt-builder/target/release/wxt-builder build/wxt/wxt-builder-linux-x86_64
+
+      - name: Upload verified outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: aethercast-wxt-mvp-output
+          path: |
+            aethercast-wxt-mvp/build/standardized/
+            aethercast-wxt-mvp/build/wxt/
+          if-no-files-found: error
+          retention-days: 1
