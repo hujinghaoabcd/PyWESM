@@ -1,0 +1,45 @@
+name: Temporary Download GFS China
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Download full China GFS subset
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p output
+          URL='https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_0p25.pl?file=gfs.t12z.pgrb2.0p25.f000&lev_2_m_above_ground=on&lev_10_m_above_ground=on&var_TMP=on&var_UGRD=on&var_VGRD=on&subregion=&leftlon=72&rightlon=136&toplat=54&bottomlat=17&dir=%2Fgfs.20260731%2F12%2Fatmos'
+          curl --fail --location --retry 5 --retry-delay 5 --connect-timeout 30 --max-time 600 \
+            --user-agent 'AetherCast-GFS-China/1.0' \
+            "$URL" -o output/gfs_20260731_12z_f000_china_72-136E_17-54N.grib2
+          test "$(head -c 4 output/gfs_20260731_12z_f000_china_72-136E_17-54N.grib2)" = 'GRIB'
+          test "$(tail -c 4 output/gfs_20260731_12z_f000_china_72-136E_17-54N.grib2)" = '7777'
+          test "$(stat -c%s output/gfs_20260731_12z_f000_china_72-136E_17-54N.grib2)" -gt 10000
+          sha256sum output/*.grib2 > output/SHA256SUMS.txt
+          cat > output/metadata.json <<'JSON'
+          {
+            "provider": "NOAA/NCEP NOMADS",
+            "model": "GFS 0.25 degree",
+            "run": "2026-07-31T12:00:00Z",
+            "forecast_hour": 0,
+            "bbox": {"left_lon": 72.0, "right_lon": 136.0, "bottom_lat": 17.0, "top_lat": 54.0},
+            "variables": ["TMP at 2 m", "UGRD at 10 m", "VGRD at 10 m"]
+          }
+          JSON
+
+      - name: Upload verified China subset
+        uses: actions/upload-artifact@v4
+        with:
+          name: gfs-china-subset
+          path: output/
+          if-no-files-found: error
+          retention-days: 1
