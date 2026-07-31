@@ -15,8 +15,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Unpack source bundle
-        run: unzip -q source_bundle.zip
+      - name: Reassemble and unpack source bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat source_bundle.part00 source_bundle.part01 source_bundle.part02 source_bundle.part03 source_bundle.part04 > source_bundle.zip.b64
+          base64 --decode source_bundle.zip.b64 > source_bundle.zip
+          unzip -q source_bundle.zip
 
       - name: Normalize GFS with Python
         working-directory: aethercast-wxt-mvp
